@@ -1,0 +1,102 @@
+name: Armelco CI
+
+on:
+    push:
+        branches: [ "main" ]
+jobs:
+    prepared-server:
+      runs-on: self-hosted
+      steps:
+            - uses: actions/checkout@v3
+            - name: Delete frontend folder
+              run: |
+                rm -rf /home/davidluna/frontend/build
+                mkdir /home/davidluna/frontend/build
+
+    build-frontend:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v3
+            - name: Set up Bun 1.0.7
+              uses: oven-sh/setup-bun@v1
+              with:
+                bun-version: 1.0.0
+            - name: Create enviorement file
+              run: |
+                echo "REACT_APP_API_URL=${{ secrets.REACT_APP_API_URL }}" >> ./frontend/.env 
+            - name: Install dependencies
+              run: |
+                cd frontend
+                bun install
+            - name: Build
+              run: |
+                cd frontend
+                bun run build
+            - name: sent files to server
+              uses: garygrossgarten/github-action-scp@release
+              with:
+                host: ${{ secrets.HOST_SERVER }}
+                username: ${{ secrets.USERNAME_SERVER }}
+                password: ${{ secrets.KEY_SERVER }}
+                local: frontend/build
+                remote: /home/davidluna/frontend/build     
+
+    build-backend:
+        needs: build-frontend
+        runs-on: self-hosted
+        steps:
+            - uses: actions/checkout@v3
+            - name: Set up Python 3.8.10
+              uses: actions/setup-python@v3
+              with:
+                python-version: 3.8.10
+
+
+            - name: Create enviorement
+              run: |
+                echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> ./backend/.env
+                echo "DJANGO_ALLOWED_HOSTS=${{ secrets.DJANGO_ALLOWED_HOSTS }}" >> ./backend/.env
+                echo "DB_NAME=${{ secrets.DB_NAME }}" >> ./backend/.env
+                echo "DB_USERNAME=${{ secrets.DB_USERNAME }}" >> ./backend/.env
+                echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> ./backend/.env
+                echo "DB_HOST=${{ secrets.DB_HOST }}" >> ./backend/.env
+                echo "DB_PORT=${{ secrets.DB_PORT }}" >> ./backend/.env
+                echo "EMAIL_HOST_USER=${{ secrets.EMAIL_HOST_USER_ }}" >> ./backend/.env
+                echo "EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD_ }}" >> ./backend/.env
+                echo "DEBUG=${{ secrets.DEBUG }}" >> ./backend/.env
+
+            - name: create symbolic link mediafiles
+              run: |
+                    ln -s  /home/davidluna/mediafiles /home/davidluna/actions-runner/armelco/armelco/armelco/backend
+                    ln -s /home/davidluna/frontend/build /home/davidluna/actions-runner/armelco/armelco/armelco/backend/static
+
+            - name: Deploy Django
+              run: |
+                  python3 -m venv ./armelco-env
+                  source armelco-env/bin/activate
+                  cd backend
+                  pip3 install -r requirements.txt
+                  python3 manage.py makemigrations
+                  python3 manage.py migrate
+                  python3 manage.py collectstatic --noinput
+
+    restart-server:
+        needs: build-backend
+        runs-on: self-hosted
+        steps:
+            - name: Restart server
+              run: |
+                echo ${{ secrets.KEY_SERVER }} | sudo -S systemctl daemon-reload
+                echo ${{ secrets.KEY_SERVER }} | sudo -S systemctl stop gunicorn
+                echo ${{ secrets.KEY_SERVER }} | sudo -S systemctl start gunicorn
+                echo ${{ secrets.KEY_SERVER }} | sudo -S systemctl enable gunicorn
+                echo ${{ secrets.KEY_SERVER }} | sudo -S systemctl restart nginx
+
+
+
+
+                
+                
+
+
+
