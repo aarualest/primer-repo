@@ -1,22 +1,20 @@
-name: Deployment Pipeline
+name: Entrenamiento y Evaluación del Modelo
 
-on:
-  push:
-    branches:
-      - master
+on: [push]
 
 jobs:
-  deploy:
+  entrenamiento-evaluacion:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - run: npm install
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-      - name: Install dependencies
-        run: npm install
-      - name: Lint
-        run: npm run eslint
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Matar el script evaluate_model.py
+      run: pkill -f evaluate_model.py || true
+
+    - name: Ejecutar el programa model_training.py
+      run: python model_training.py
+
+    - name: Ejecutar el programa evaluate_model.py
+      run: python evaluate_model.py
